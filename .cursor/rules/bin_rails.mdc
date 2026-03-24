@@ -1,0 +1,10 @@
+---
+description: Guidelines for using the rails and bin/rails command
+globs:
+---
+## General Rules
+
+Always Use bin/rails
+- Use `bin/rails` instead of just `rails`
+- Ensures consistent environment
+- Uses project-specific binstubs

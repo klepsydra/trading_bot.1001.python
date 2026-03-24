@@ -1,0 +1,17 @@
+---
+description: Auto-commit substantive project changes at end of agent work
+alwaysApply: true
+---
+
+# Git — commit when wrapping up
+
+When you finish a task that changes tracked project files:
+
+1. Run `git status`. Stage only intentional changes (source, `requirements.txt`, `.gitignore`, rules, docs the user requested).
+2. **Never** stage `.venv/`, `__pycache__/`, or `logs/` unless the user explicitly asked. **Do not** `git add -f .env` or commit secrets unless the user clearly requests it.
+3. If there is a meaningful diff staged, commit with a short imperative subject line (and optional body) describing what changed.
+4. If nothing changed or the user only asked a question, skip git steps.
+
+This repo expects commits to land on `main` without extra prompting when work is done.
+
+After committing, follow **auto-push** (`.cursor/rules/auto-push.mdc`): try `git push` when ahead of upstream and online, without force-push.

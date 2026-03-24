@@ -1,0 +1,16 @@
+---
+description: Auto-push after commit when online and push is safe
+alwaysApply: true
+---
+
+# Git — push when possible
+
+After you **commit** (including as part of wrapping up a task):
+
+1. If `git status` shows **ahead of** `origin/<branch>` (or the configured upstream), attempt `git push` for the current branch (typically `git push origin HEAD` or `git push -u origin <branch>` if no upstream is set yet).
+2. **Only push when it is reasonable to assume the machine is online** (you can run the command; if it fails with a network or DNS error, stop after a short note — do not spam retries).
+3. **Do not** `git push --force` or `--force-with-lease` unless the user explicitly asks.
+4. If push is rejected because the remote has new commits (**non-fast-forward**), do not force; tell the user they need to `git pull --rebase` (or merge) and resolve conflicts, then push.
+5. If there is **no remote**, **no upstream**, or the repo is a bare/local-only clone, skip push without error.
+
+Goal: keep `main` (or the active branch) synced to the remote when commits were just made and the network allows.

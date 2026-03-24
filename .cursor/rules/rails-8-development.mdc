@@ -1,0 +1,18 @@
+---
+description: Ruby on Rails 8 conventions (Solid stack, Hotwire, Kamal, RSpec)
+globs: "**/*.{rb,erb}"
+alwaysApply: false
+---
+
+# from https://share.google/aimode/veoNpwwDq6tvYZzyU
+
+# Ruby on Rails 8 Development Rules
+
+- **Framework Defaults**: Use Rails 8 conventions. Prefer Solid Queue, Solid Cache, and Solid Cable over Redis-based alternatives unless horizontal scale requires it.
+- **Frontend**: Prioritize Hotwire (Turbo + Stimulus) over React/Vue. Use Tailwind CSS via the official `tailwindcss-rails` gem.
+- **Code Generation**: Always use `rails generate` commands (model, controller, migration) to ensure standard boilerplate is created.
+- **Logic Placement**: Keep controllers RESTful and "skinny." Move complex business logic to Service Objects in `app/services` or use Concerns.
+- **Authentication**: Use the native Rails 8 authentication generator logic (`bin/rails generate authentication`) instead of Devise for new features.
+- **Deployment**: Assume [Kamal 2](https://kamal-deploy.org/) for deployment orchestration.
+- **Testing**: Follow RSpec BDD conventions. Use FactoryBot for test data; prefer `let` over `let!` to keep tests lazy and fast.
+- **Security**: Always use `params.expect()` (Rails 8 style) for strong parameters.

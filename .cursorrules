@@ -1,0 +1,555 @@
+# trading_bot.1001 (klepsydra) — core language: **Ruby** for new work; Python is the legacy Alpaca runner (`bot.py`).
+#
+# Quilty.app - AI-Powered Screenplay Analysis Platform
+# Optimized Cursor AI Development Rules
+
+## Core Commands to Avoid
+- Do not restart ports 5127 or 8027.
+- Do not run `pkill -f "uvicorn app.main:app"`.
+
+## Core Principles
+- Write clean, simple, senior-level code.
+- No legacy support needed (pre-launch).
+- Avoid deprecated patterns or workarounds.
+- Use modern best practices only.
+- Delete unused code immediately.
+- Take advantage of features in our Tech Stack
+
+## Database Architecture (CRITICAL)
+
+### Development (marcos.quilty.app)
+- **Database**: Docker PostgreSQL 17-alpine (separate from system and dwood)
+- **Port**: 5436 (Docker container)
+- **Database Name**: quilty_marcos_dev
+- **Connection**: `postgresql+asyncpg://marckoby:3lonmusk5175@localhost:5436/quilty_marcos_dev`
+- **Start Database**: `docker-compose up -d postgres-dev` or `make db-start`
+- **Management**: Use Docker commands or `make` targets (see Makefile)
+
+### Production (quilty.app)
+- **Database**: System PostgreSQL 17.7
+- **Port**: 5432 (system service)
+- **Database Name**: quilty_prod
+- **Connection**: `postgresql+asyncpg://dwood:PASSWORD@localhost:5432/quilty_prod`
+- **Management**: System PostgreSQL tools
+
+### Version Alignment
+**CRITICAL**: Dev and production MUST use the same PostgreSQL major version to prevent compatibility issues.
+- Current standard: **PostgreSQL 17**
+- Check versions: See `ENVIRONMENT_VERSIONS.md`
+- Upgrade dev: Run `./scripts/upgrade-dev-postgres.sh`
+
+### Key Rules
+1. **Development MUST use Docker database (port 5434)** - Never use system PostgreSQL for development
+2. **Production MUST use system database (port 5432)** - Never use Docker for production
+3. **Always verify DATABASE_URL** in .env matches the environment (dev vs prod)
+4. **Database isolation** ensures development changes never affect production
+5. **Use Makefile commands** for common tasks (see `make help`)
+6. **Port allocation**: System PostgreSQL (5432), dwood Docker (5433), marcos Docker (5436)
+
+### Quick Commands
+```bash
+# Start development database
+make db-start          # or: docker-compose up -d postgres-dev
+
+# Check database status
+make status            # or: docker-compose ps
+
+# Database shell
+make db-shell          # or: docker-compose exec postgres-dev psql -U marckoby -d quilty_marcos_dev
+
+# Backup/Restore
+make db-backup         # Creates timestamped backup
+make db-restore FILE=backup.sql
+
+# Reset database (WARNING: Deletes all data)
+make db-reset
+
+# See all commands
+make help
+```
+
+app user credentials - dwood@nuper.com / 49Niners!
+
+## Data Architecture Principles
+
+### Backend: Zero Transformation
+- **Direct Storage**: AI provider responses stored as-is in PostgreSQL JSONB
+- **No Mapping Layer**: Backend does NOT flatten, prefix, or transform AI responses
+- **API Returns Raw JSONB**: Database JSON returned exactly as stored
+- **No DTO Layer**: No Pydantic schemas for transformation, only for validation if needed
+- **Only Exception**: Datetime objects converted to ISO strings at JSONB storage boundary
+
+### Data Structure
+AI responses are stored nested by provider:
+```javascript
+{
+  "story_craft_analysis": { ...Claude response... },
+  "cultural_market_reality": { ...Grok response... },
+  "market_finance_analysis": { ...Grok response... },
+  "ip_market_analysis": { ...Perplexity response... },
+  "preview_context": { ...flat preview fields... }
+}
+```
+
+### Frontend: Direct Access
+- **Access nested structure directly**: `data.story_craft_analysis.overall_score`
+- **Use optional chaining**: `data?.story_craft_analysis?.overall_score`
+- **Optional utility functions**: Create helpers for common access patterns
+- **Optional display adapters**: Convenience adapters at display layer are acceptable
+- **No transformation in API layer**: Keep data layer clean
+
+### Benefits
+- **Zero backend complexity**: No transformation logic to maintain
+- **What AI returns is what you get**: Direct pass-through from AI to frontend
+- **Easy additions**: Add field to AI prompt → immediately available in frontend
+- **Easy debugging**: Inspect raw AI responses in database/API
+- **Clean separation**: AI logic in prompts, display logic in frontend
+- **Transparent**: Always know exactly what AI returned
+
+### Exception: Talent Analysis
+Talent analysis requires ONE-TIME flattening at the API boundary because:
+- Multi-tier nested structure: `talent_summary.talent_recommendations.user_budget_scenario.director_analysis`
+- Frontend expects flat fields: `talent_user_budget_top_director_name`
+- Flattening happens in `_get_analysis_data()` via helper functions
+- This is the ONLY transformation layer - all other data passes through raw
+
+## Content Standards
+
+### Film Title Formatting
+- **Always include release year**: Film titles must always be displayed with their release year in the format "Title (Year)"
+- **Applies everywhere**: AI prompts, frontend display, database storage, API responses
+- **Examples**: "The Godfather (1972)", "Inception (2010)", "Parasite (2019)"
+- **AI Integration**: Instruct AI providers to always return film titles with years
+- **Frontend Display**: Ensure all components displaying film titles include the year
+
+## Project Architecture
+- Virtual environment (venv) in the project root.
+- Configuration stored in `.env` file in the project root (do not hardcode secrets).
+- **Docker Compose**: Development database runs in Docker (port 5434).
+- **Makefile**: Common development tasks automated (run `make help`).
+
+### Environment Setup
+- **Development**: marcos.quilty.app (Nginx proxy: frontend on :5127, backend on :8027).
+  - Database: Docker PostgreSQL on port 5436 (quilty_marcos_dev)
+  - User: marckoby
+  - Start: `make dev-start` or `docker-compose up -d postgres-dev`
+- **Production**: quilty.app (same proxy pattern).
+  - Database: System PostgreSQL on port 5432 (quilty_prod)
+- **Database**: PostgreSQL with JSONB for complex data.
+- **Tech Stack**: Svelte 5 + SvelteKit 2.x + TypeScript, FastAPI + SQLAlchemy 2.x async, TailwindCSS 3.x, Docker for development database.
+
+### Nginx Configuration Example
+```
+location / {
+    proxy_pass http://127.0.0.1:5127;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # WebSocket support for Vite HMR
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_cache_bypass $http_upgrade;
+}
+
+location /api/ {
+    proxy_pass http://127.0.0.1:8027/api/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+## Critical API Rules
+
+### Nginx Proxy Pattern (NEVER VIOLATE)
+- Frontend endpoints must include `/api/` prefix (e.g., `/api/auth/login`).
+- Backend receives full path (e.g., `@router.get("/api/auth/login")`).
+- Never create `/api/api/` double prefixes.
+- Test with: `curl https://marcos.quilty.app/api/endpoint`.
+
+### Endpoint Management
+- **One Task, One Endpoint**: Check for existing endpoints before creating new ones.
+- **REST Standards**: Collections at `/api/resources/`, items at `/api/resources/{id}`.
+- **Router Pattern**: `app.include_router(router, prefix="/api/resource", tags=["resource"])`.
+
+## Authentication Rules (CRITICAL - NO EXCEPTIONS)
+
+### Core Principles
+- Never rebuild auth systems—only fix specific integration issues.
+- Preserve existing JWT patterns—no mixing with cookies/sessions.
+- Use localStorage only for token storage (no httpOnly cookies).
+- Include `Authorization: Bearer ${token}` in all API requests.
+
+### Debug Process (IN ORDER)
+1. Check token storage: Is the token saved correctly?
+2. Check token retrieval: Is the token read correctly?
+3. Check API headers: Is the Authorization header included?
+4. Check backend validation: Is the JWT properly validated?
+5. Only then consider architecture changes.
+
+### Forbidden Changes
+- No server-side form actions for JWT auth.
+- No mixing JWT + cookies + localStorage.
+- No httpOnly cookies for client-side tokens.
+- No major refactoring of working auth flows.
+
+## Frontend Development
+
+### SvelteKit Patterns
+- Use file-based routing with proper load functions for SSR/SSG.
+- Favor component composition over inheritance.
+- Use reactive statements for computed values.
+- Implement error boundaries with user-friendly messages.
+
+### Mobile-First Design (TailwindCSS)
+- **Breakpoints**: Mobile 375px+ (default), sm:640px+, lg:1024px+, xl:1280px+.
+- **Touch Targets**: Minimum height/width of 44px (e.g., min-h-11 min-w-11).
+- **Performance**: Target FCP <1.5s, LCP <2.5s, TTI <3.5s.
+
+### TypeScript Standards
+- Enable strict mode; define interfaces for all props.
+- Use generic types for reusable components.
+- Implement proper error handling with typed exceptions.
+
+## Backend Development
+
+### FastAPI Patterns
+- Use dependency injection for database sessions and auth.
+- Employ async/await for all database operations.
+- Use Pydantic v2 for input validation ONLY (not for transformation).
+- Handle long-running operations with background tasks.
+- **CRITICAL**: API endpoints return JSONB data exactly as stored - no transformation layer.
+
+### Database Best Practices
+- Follow SQLAlchemy 2.x async patterns.
+- Use JSONB for complex data structures (AI responses, dynamic data).
+- Store AI responses as raw JSONB - no transformation.
+- Use `prepare_for_jsonb()` utility only for datetime → ISO conversion.
+- Define proper relationships with lazy loading.
+- Use Alembic for migrations.
+
+### Database Session Management (CRITICAL)
+**NEVER hold database sessions during long-running operations (AI calls, file processing, etc.)**
+
+#### The Problem
+Holding a database session open during a 30-second AI call:
+- Blocks database connections (pool exhaustion)
+- Causes "idle in transaction" issues
+- Leads to deadlocks and timeouts
+- Wastes resources
+
+#### The Solution: Detach & Merge Pattern
+```python
+# ❌ BAD: Holding session during AI call
+async def analyze(db: AsyncSession):
+    screenplay = await db.get(Screenplay, id)
+    result = await ai_provider.analyze(screenplay.content)  # 30 seconds!
+    screenplay.analysis = result
+    await db.commit()  # Session held for 30+ seconds
+
+# ✅ GOOD: Detach data, release session, merge back
+async def analyze(db: AsyncSession):
+    # Step 1: Load data (short transaction)
+    async with get_db_session_context() as db:
+        screenplay = await db.get(Screenplay, id)
+        # Extract data we need (detach from session)
+        screenplay_data = {
+            'id': screenplay.id,
+            'content': screenplay.content,
+            'title': screenplay.title
+        }
+        await db.commit()
+    # Session closed - no connection held during AI call
+    
+    # Step 2: Long-running operation (no database connection)
+    result = await ai_provider.analyze(screenplay_data['content'])
+    
+    # Step 3: Save results (short transaction)
+    async with get_db_session_context() as db:
+        screenplay = await db.get(Screenplay, screenplay_data['id'])
+        screenplay.analysis = result
+        await db.commit()
+    # Session closed immediately
+```
+
+#### When to Use Detach & Merge
+**ALWAYS use this pattern when:**
+- Calling AI providers (Claude, GPT, Gemini, etc.)
+- Processing large files (PDF extraction, text parsing)
+- Making external API calls (Perplexity, IMDb, etc.)
+- Any operation taking > 5 seconds
+- Background tasks that run async
+
+**Example: Full Analysis Service**
+```python
+class FullAnalyzer:
+    async def _commit_with_fresh_session(
+        self,
+        analysis: FullAnalysis,
+        stage: str,
+    ) -> None:
+        """Commit with fresh session to avoid holding connections"""
+        from app.core.database import get_db_session_context
+        
+        async with get_db_session_context() as fresh_db:
+            # Merge the detached object into fresh session
+            await fresh_db.merge(analysis)
+            await fresh_db.commit()
+```
+
+#### Session Configuration
+Our sessions use `expire_on_commit=False` to keep objects accessible after commit:
+```python
+sessionmaker(
+    bind=db_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,  # Keep objects accessible after commit
+    autoflush=True,
+    autocommit=False,
+)
+```
+
+#### Key Rules
+1. **Extract data before long operations**: Copy needed fields to dict/dataclass
+2. **Close session before AI calls**: Use `async with` context managers
+3. **Merge back after operations**: Use `await db.merge(obj)` to reattach
+4. **Use fresh sessions**: `get_db_session_context()` for each database operation
+5. **Keep transactions short**: < 5 seconds per session
+
+#### Common Patterns
+```python
+# Pattern 1: Extract → Process → Save
+async with get_db_session_context() as db:
+    data = extract_data(await db.get(Model, id))
+result = await long_operation(data)
+async with get_db_session_context() as db:
+    obj = await db.get(Model, id)
+    obj.result = result
+    await db.commit()
+
+# Pattern 2: Background task with detached data
+async def background_task(model_id: int, data: dict):
+    result = await ai_call(data)  # No session held
+    async with get_db_session_context() as db:
+        obj = await db.get(Model, model_id)
+        obj.result = result
+        await db.commit()
+
+# Pattern 3: Iterative updates during long process
+for step in long_process:
+    result = await process_step(step)
+    async with get_db_session_context() as db:
+        await db.merge(analysis)  # Merge detached object
+        analysis.progress = result
+        await db.commit()
+    # Session closed between steps
+```
+
+### Security Requirements
+- Implement JWT with refresh token rotation.
+- Apply rate limiting on sensitive endpoints.
+- Perform input validation and sanitization.
+- Never log passwords, tokens, or personal data.
+
+## AI Integration
+
+### Cost Management
+- Track token usage for all providers.
+- Implement per-user spending limits.
+- Cache responses when appropriate.
+- Use cheaper models (e.g., DeepSeek) for preliminary analysis.
+
+### Error Handling
+- Use circuit breaker pattern for AI services.
+- Implement graceful degradation when services are down.
+- Apply retry logic with exponential backoff.
+- Provide fallback responses for critical paths.
+
+### Provider Management
+- Abstract providers behind a common interface.
+- Select dynamically based on task type.
+- Perform health checks for service availability.
+
+## File Processing
+
+### Document Security
+- Validate file types and sizes before processing.
+- Clean up temporary files after processing.
+- Ensure secure storage with appropriate permissions.
+
+### Screenplay Processing
+- Support: PDF, DOCX, TXT, Final Draft (FDX).
+- Use multi-method extraction: pdfplumber → PyPDF2 → fallback.
+- Detect and validate formats.
+- Extract text while preserving metadata.
+
+## Development Workflow
+
+### Starting Development Environment
+1. **Start Database**: `make db-start` (or `docker-compose up -d postgres-dev`)
+2. **Verify .env**: Ensure `DATABASE_URL=postgresql+asyncpg://marckoby:3lonmusk5175@localhost:5436/quilty_marcos_dev`
+3. **Run Migrations**: `make migrate-up` (or `cd backend && alembic upgrade head`)
+4. **Start Backend**: `./RESTART_BACKEND.sh` (separate terminal)
+5. **Start Frontend**: `cd frontend && npm run dev` (separate terminal)
+6. **Verify**: Check https://marcos.quilty.app and https://marcos.quilty.app/api/docs
+
+### Daily Workflow
+```bash
+./RESTART_BACKEND.sh        # Terminal 1: Start backend
+cd frontend && npm run dev  # Terminal 2: Start frontend
+```
+See **Quick Commands** in Database Architecture section for all `make` commands.
+
+### Code Quality Gates
+- Use pre-commit hooks for linting/formatting.
+- Enforce TypeScript strict mode.
+- Write unit tests for critical business logic.
+- Create integration tests for API endpoints.
+- **Run linters**: `make lint` or `make format`
+- **Run tests**: `make test`
+
+### Debugging Tools
+- Use browser dev tools for frontend issues.
+- Test APIs via FastAPI docs at `/docs`.
+- Enable database query logging in development.
+- Use structured logging without sensitive data.
+- **Database shell**: `make db-shell`
+- **Check health**: `make health`
+- **View logs**: `make db-logs` or `make docker-logs`
+
+### Security & Compliance
+- Adhere to film industry data protection (NDA-level).
+- Encrypt sensitive data at rest.
+- Maintain audit logs for sensitive operations.
+- Ensure professional-grade security for client data.
+
+## AI Agent Guidelines
+
+### Scope Control
+- Focus on specific requested changes only.
+- No "while we're at it" improvements.
+- Ask before expanding beyond defined scope.
+- Preserve existing working functionality.
+
+### Testing Requirements
+- Test changes incrementally.
+- Provide rollback strategy if changes fail.
+- Document specific files being modified.
+- Validate against existing patterns.
+
+### Red Flags - Stop and Ask
+- Suggestions to rebuild working systems.
+- Major architectural changes not requested.
+- Mixing incompatible design patterns.
+- Adding complex dependencies without justification.
+
+## Code Review Checklist
+Before any commit:
+1. API URLs follow Nginx proxy pattern.
+2. No endpoint duplication (check existing first).
+3. Mobile-first responsive design implemented.
+4. Authentication properly applied to protected routes.
+5. No hardcoded secrets or sensitive data.
+6. Database operations use async patterns.
+7. Error handling implemented for failure cases.
+8. Performance impact considered and optimized.
+9. **No transformation layers**: API returns JSONB exactly as stored.
+10. **No field mapping**: Backend does not flatten or prefix AI response fields.
+11. **Database sessions detached**: No sessions held during AI calls or long operations (use detach & merge pattern).
+12. **Fresh sessions for commits**: Use `get_db_session_context()` for database operations in long-running tasks.
+
+
+#  https://share.google/aimode/FPsQsqQiZZtV0p63m
+# Python Package Management
+- Always use `uv` instead of `pip` or `conda` for Python package management.
+- When suggesting package installations, use `uv add <package>` instead of `pip install`.
+- When suggesting package removals, use `uv remove <package>` instead of `pip uninstall`.
+- Use `uv run <script.py>` to execute Python scripts to ensure the environment is synced.
+- For virtual environments, use `uv venv` and `uv sync` to manage dependencies via `uv.lock`.
+- If a project uses `requirements.txt`, use `uv pip install -r requirements.txt` for faster resolution.
+
+
+
+
+#  https://share.google/aimode/tR6oc3sQL5QaHW1t3
+# Ruby Development Rules
+You are an expert Ruby developer. Follow these guidelines for all code generation:
+
+- **Idiomatic Ruby**: Use expressive syntax like `unless`, `||=`, and `&.` (safe navigation).
+- **Naming**: Use `snake_case` for methods/variables and `CamelCase` for classes/modules.
+- **Strings**: Prefer single quotes (`'`) unless interpolation (`#{}`) is required.
+- **Error Handling**: Use exceptions only for exceptional cases, not for control flow.
+- **Structure**: Prefer modularization and small methods over large, monolithic blocks.
+- **Testing**: Default to [RSpec](https://rspec.info) or [Minitest](https://github.com) based on project structure.
+
+
+#  https://github.com/PatrickJS/awesome-cursorrules
+
+
+#  https://github.com/rapidruby/rapid-ruby-starter/blob/main/.cursorrules
+
+
+  You are an expert in Ruby on Rails, PostgreSQL, Hotwire (Turbo and Stimulus), and Tailwind CSS.
+
+  Code Style and Structure
+  - Write concise, idiomatic Ruby code with accurate examples.
+  - Follow Rails conventions and best practices.
+  - Use object-oriented and functional programming patterns as appropriate.
+  - Prefer iteration and modularization over code duplication.
+  - Use descriptive variable and method names (e.g., user_signed_in?, calculate_total).
+  - Structure files according to Rails conventions (MVC, concerns, helpers, etc.).
+
+  Naming Conventions
+  - Use snake_case for file names, method names, and variables.
+  - Use CamelCase for class and module names.
+  - Follow Rails naming conventions for models, controllers, and views.
+
+  Ruby and Rails Usage
+  - Use Ruby 3.x features when appropriate (e.g., pattern matching, endless methods).
+  - Leverage Rails' built-in helpers and methods.
+  - Use ActiveRecord effectively for database operations.
+
+  Syntax and Formatting
+  - Follow the Ruby Style Guide (https://rubystyle.guide/)
+  - Use Ruby's expressive syntax (e.g., unless, ||=, &.)
+  - Prefer double quotes for strings.
+
+  Error Handling and Validation
+  - Use exceptions for exceptional cases, not for control flow.
+  - Implement proper error logging and user-friendly messages.
+  - Use ActiveModel validations in models.
+  - Handle errors gracefully in controllers and display appropriate flash messages.
+
+  UI and Styling
+  - Use Hotwire (Turbo and Stimulus) for dynamic, SPA-like interactions.
+  - Implement responsive design with Tailwind CSS.
+  - Use Rails view helpers and partials to keep views DRY.
+
+  Performance Optimization
+  - Use database indexing effectively.
+  - Implement caching strategies (fragment caching, Russian Doll caching).
+  - Use eager loading to avoid N+1 queries.
+  - Optimize database queries using includes, joins, or select.
+
+  Key Conventions
+  - Follow RESTful routing conventions.
+  - Use concerns for shared behavior across models or controllers.
+  - Implement service objects for complex business logic.
+  - Use background jobs (e.g., ActiveJob) for time-consuming tasks.
+
+  Testing
+  - Write comprehensive tests using RSpec.
+  - Follow TDD/BDD practices.
+  - Use fixtures or create Active Record objects for test data generation.
+
+  Security
+  - Implement proper authentication and authorization (e.g., Devise, Pundit).
+  - Use strong parameters in controllers.
+  - Protect against common web vulnerabilities (XSS, CSRF, SQL injection).
+
+  Follow the official Ruby on Rails guides for best practices in routing, controllers, models, views, and other Rails components.
+  
