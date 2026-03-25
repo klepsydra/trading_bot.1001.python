@@ -1,0 +1,49 @@
+default: &default
+  paper_trading: true
+  ticker_pairs:
+    QQQ:
+      etf: TQQQ
+      leverage: 3
+    SPY:
+      etf: SPYU
+      leverage: 4
+    IWM:
+      etf: TNA
+      leverage: 3
+    DIA:
+      etf: UDOW
+      leverage: 3
+  signal_weights:
+    zscore: 0.35
+    rsi: 0.25
+    volume: 0.20
+    ema: 0.20
+  buy_threshold: 0.40
+  sell_threshold: -0.40
+  rsi_period: 14
+  rsi_overbought: 70
+  rsi_oversold: 30
+  ema_fast: 9
+  ema_slow: 21
+  zscore_lookback: 20
+  volume_spike_multiplier: 1.5
+  historical_bars: 60
+  max_daily_drawdown_pct: 0.05
+  stop_loss_pct: 0.07
+  take_profit_pct: 0.15
+  max_portfolio_alloc_pct: 0.20
+  kelly_fraction: 0.25
+  loop_interval_seconds: 60
+  market_open_hour: 9
+  market_open_minute: 30
+  market_close_hour: 15
+  market_close_minute: 45
+
+development:
+  <<: *default
+
+test:
+  <<: *default
+
+production:
+  <<: *default

@@ -1,70 +1,56 @@
 # CLAUDE PROJECT INSTRUCTIONS — Momentum Trading Bot (`trading_bot.1001`)
 
-## Project language
-**Core language: Ruby** — prefer Ruby (and Rails 8 patterns from `.cursor/rules`) for new features, libraries, and refactors. The **Alpaca execution path** below is still implemented in **Python** (`bot.py`, `config/`, `strategies/`, etc.) until ported.
+## Stack
 
-## Overview
-This repository includes a Python algorithmic trading bot using **Alpaca Markets paper trading**.
-It monitors unleveraged base ETF tickers for momentum signals and executes trades
-on their leveraged counterparts.
+- **Ruby on Rails 8** — primary codebase.
+- **Alpaca** paper trading (HTTP APIs via `Trading::Broker` + Faraday).
+- **One tick** = `TradingIterationJob` → `Trading::Runner#tick` (equivalent to one pass of the former Python `loop_iteration`).
 
-## Ticker Pairs
-| Base (signal) | Leveraged ETF (traded) | Leverage |
-|---------------|------------------------|----------|
-| QQQ           | TQQQ                   | 3×       |
-| SPY           | SPYU                   | 4×       |
-| IWM           | TNA                    | 3×       |
-| DIA           | UDOW                   | 3×       |
+## Project layout
 
-## Signal Engine (`strategies/signals.py`)
-Composite score = weighted sum of four components:
-
-| Component       | Weight | Description |
-|-----------------|--------|-------------|
-| Z-score         | 35%    | 1-day return normalised by 20-day rolling stddev |
-| RSI             | 25%    | Scaled to [−1, +1]; oversold → +1, overbought → −1 |
-| Volume          | 20%    | Spike confidence multiplier (0–1) |
-| EMA crossover   | 20%    | Fast (9) vs Slow (21) EMA percentage gap |
-
-- **BUY**  when score ≥  +0.40
-- **SELL** when score ≤  −0.40
-- **HOLD** otherwise
-
-## Risk Controls (`risk/risk_manager.py`)
-1. **Daily drawdown halt**: if portfolio drops ≥5% intraday → stop all trading
-2. **Stop-loss**: 7% below entry (bracket order)
-3. **Take-profit**: 15% above entry (bracket order)
-4. **Max portfolio allocation**: 20% per position
-5. **Fractional Kelly sizing**: scaled by signal strength and 1-day volatility
-
-## Project Files
 ```
-bot.py                      ← entry point
-config/settings.py          ← all tuneable parameters + API keys
-strategies/signals.py       ← signal computation
-risk/risk_manager.py        ← position sizing + drawdown checks
-core/broker.py              ← Alpaca API wrapper
-utils/trade_logger.py       ← CSV + structured logging
-requirements.txt
+config/trading.yml              ← tune pairs, signal weights, risk, session window
+app/services/trading/broker.rb  ← Alpaca trading + market data HTTP client
+app/services/trading/signals.rb ← z-score, RSI, EMA, volume composite (ported)
+app/services/trading/risk_manager.rb
+app/services/trading/trade_logger.rb   ← CSV append log/trades.csv
+app/services/trading/daily_drawdown_store.rb  ← tmp/trading/day_start_portfolio.json
+app/services/trading/runner.rb  ← orchestrates one tick
+app/jobs/trading_iteration_job.rb
+scripts/run_bot_cron.sh         ← cron: flock + bundle exec rails runner
 ```
+
+## Ticker pairs
+
+| Base (signal) | Leveraged ETF | Leverage |
+|---------------|---------------|----------|
+| QQQ           | TQQQ          | 3×       |
+| SPY           | SPYU          | 4×       |
+| IWM           | TNA           | 3×       |
+| DIA           | UDOW          | 3×       |
+
+## Signal engine
+
+Same composite as the Python version (weights and thresholds in `config/trading.yml`).
+
+## Risk
+
+- Daily drawdown halt, max allocation per name, fractional-Kelly-style sizing, bracket SL/TP on entry (see `Trading::RiskManager` and `Trading::Broker#place_bracket_order`).
 
 ## Setup
-1. Open `config/settings.py` and set `ALPACA_API_KEY` / `ALPACA_SECRET_KEY`
-   (or export them as environment variables).
-2. `pip install -r requirements.txt`
-3. `python bot.py`
 
-## Key Library: alpaca-py
-- `TradingClient(api_key, secret_key, paper=True)` — orders & account
-- `StockHistoricalDataClient(api_key, secret_key)` — historical bars
-- All orders are **bracket orders** (market entry + SL + TP).
-- Only whole shares are used (no fractional for leveraged ETFs).
-- Base URLs are handled automatically by `paper=True`.
+1. `bundle install` and `cp .env.example .env` — set `ALPACA_API_KEY` / `ALPACA_SECRET_KEY`.
+2. `bin/rails db:prepare`
+3. Manual tick: `bin/rails trading:tick`
+4. Cron: run `scripts/run_bot_cron.sh` every minute during market hours (see `README.md`).
 
-## Constraints Claude Must Respect
-- NEVER generate code that sets `paper=False` unless explicitly requested.
-- NEVER hardcode API keys; always use environment variables or `config/settings.py`.
-- ALWAYS use bracket orders so every trade has a stop-loss.
-- ALWAYS perform `pre_trade_check` before order submission.
-- Risk parameters in `config/settings.py` are the single source of truth.
-- Do not change `STOP_LOSS_PCT` below 0.05 or `MAX_DAILY_DRAWDOWN_PCT` below 0.03.
+## Constraints
+
+- Do **not** point the broker at live Alpaca (`paper_trading` in `trading.yml`) unless the user explicitly asks.
+- Never commit `.env` or real keys.
+- Always use bracket orders for entries; run `pre_trade_check` before buys.
+- Prefer **service objects** under `app/services/trading/` for new logic.
+
+## Market data feed
+
+`Trading::Broker` requests `feed=sip` for daily bars. If your Alpaca subscription rejects SIP on paper, switch to `iex` in `broker.rb` for that request.
